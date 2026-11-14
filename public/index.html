@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#2855d9">
+  <meta name="description" content="Không gian dịch văn bản riêng với model bạn chọn.">
+  <title>Translate Workspace</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div id="boot" class="boot" role="status">Đang mở không gian dịch…</div>
+  <section id="login-view" class="login-layout" hidden>
+    <div class="login-story">
+      <a class="brand" href="/" aria-label="Translate, trang chủ"><span class="brand-symbol" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h15M11.5 3v4M7 7c0 7 4 11 10 14M17 7c-1 7-5 12-12 16M17 27l6-15 6 15M19 22h8"/></svg></span>translate<span class="brand-dot">.</span></a>
+      <div class="story-content">
+        <h1>Giữ đúng ý.<br>Dịch đúng lời.</h1>
+        <p>Một không gian yên tĩnh cho ngôn từ.<br>Chọn model, đặt văn bản vào, nhận bản dịch.</p>
+        <div class="language-note" aria-hidden="true"><span>Hello.</span><span class="note-rule"></span><span>Xin chào.</span></div>
+      </div>
+      <span class="story-footer">Không gian dịch riêng của bạn</span>
+    </div>
+    <div class="login-main">
+      <form id="login-form" class="login-form">
+        <span class="small-mark" aria-hidden="true">A / a</span>
+        <h2>Chào mừng trở lại</h2>
+        <p>Đăng nhập để bắt đầu dịch văn bản.</p>
+        <label for="username">Tài khoản</label>
+        <input id="username" name="username" autocomplete="username" required maxlength="100" placeholder="Tên tài khoản">
+        <label for="password">Mật khẩu</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required maxlength="256" placeholder="Nhập mật khẩu">
+        <p id="login-error" class="error" role="alert" hidden></p>
+        <button id="login-button" class="primary" type="submit">Đăng nhập</button>
+        <p class="login-footnote">Chỉ tài khoản được cấp mới có quyền truy cập.</p>
+      </form>
+    </div>
+  </section>
+
+  <div id="workspace" hidden>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="Translate, trang chủ"><span class="brand-symbol" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h15M11.5 3v4M7 7c0 7 4 11 10 14M17 7c-1 7-5 12-12 16M17 27l6-15 6 15M19 22h8"/></svg></span>translate<span class="brand-dot">.</span></a>
+      <nav aria-label="Điều hướng chính">
+        <button class="nav-tab active" id="translate-tab" aria-current="page">Dịch văn bản</button>
+        <button class="nav-tab" id="account-tab">API & tài khoản</button>
+      </nav>
+      <div class="user-actions"><span id="account-name" class="account-name"></span><button id="logout" class="quiet">Đăng xuất</button></div>
+    </header>
+    <main>
+      <p id="global-error" class="error banner" role="alert" hidden></p>
+      <section id="translate-panel">
+        <div class="page-intro"><div><h1>Qua một ngôn ngữ.<br>Vẫn trọn ý của bạn.</h1><p>Dịch văn bản với model bạn tin dùng.</p></div><span class="intro-glyph" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h15M11.5 3v4M7 7c0 7 4 11 10 14M17 7c-1 7-5 12-12 16M17 27l6-15 6 15M19 22h8"/></svg></span></div>
+        <form id="translation-form">
+          <div class="model-row">
+            <div class="model-control"><label for="model">Model dịch</label><input id="model" list="model-options" placeholder="Tìm theo tên model…" autocomplete="off" required maxlength="300" spellcheck="false"><datalist id="model-options"></datalist></div>
+            <button type="button" id="refresh-models" class="quiet refresh" title="Tải lại danh sách model">↻ <span>Tải lại model</span></button>
+            <span id="model-status" class="model-status" role="status">Đang tải model…</span>
+          </div>
+          <div class="translation-board">
+            <section class="text-panel source-panel" aria-label="Văn bản gốc">
+              <div class="panel-toolbar"><label class="sr-only" for="source-language">Ngôn ngữ nguồn</label><select id="source-language"></select><button id="swap" class="icon-button" type="button" aria-label="Đảo ngôn ngữ và văn bản" title="Đảo ngôn ngữ">⇄</button></div>
+              <label class="sr-only" for="source-text">Văn bản cần dịch</label>
+              <textarea id="source-text" placeholder="Nhập hoặc dán văn bản cần dịch…" maxlength="20000" required spellcheck="false"></textarea>
+              <div class="panel-bottom"><button type="button" id="clear" class="quiet">Xóa văn bản</button><span id="char-count">0 / 20.000</span></div>
+            </section>
+            <section class="text-panel result-panel" aria-label="Bản dịch">
+              <div class="panel-toolbar"><label class="sr-only" for="target-language">Ngôn ngữ đích</label><select id="target-language"></select><span class="result-label">Bản dịch</span></div>
+              <label class="sr-only" for="result-text">Kết quả dịch</label>
+              <textarea id="result-text" placeholder="Bản dịch sẽ xuất hiện ở đây." readonly aria-describedby="translation-status"></textarea>
+              <div class="panel-bottom"><span id="translation-status" role="status" aria-live="polite">Sẵn sàng khi bạn cần.</span><button type="button" id="copy" class="quiet" disabled>Sao chép</button></div>
+            </section>
+          </div>
+          <div class="translation-actions"><span class="keyboard-hint"><kbd>Ctrl</kbd> + <kbd>Enter</kbd> để dịch</span><button id="translate-button" type="submit" class="primary">Dịch văn bản <span aria-hidden="true">↗</span></button></div>
+          <p id="translation-error" class="error" role="alert" hidden></p>
+        </form>
+        <p class="privacy-note">Văn bản được gửi đến model qua OmniRoute. Website không lưu lịch sử bản dịch.</p>
+      </section>
+
+      <section id="account-panel" hidden>
+        <div class="section-intro"><h1>Kết nối theo cách của bạn.</h1><p>Dùng API dịch trong ứng dụng, script hoặc công cụ của bạn.</p></div>
+        <div class="account-grid">
+          <section class="settings-section"><h2>API token</h2><p>Token riêng để gọi API. Key OmniRoute không được chia sẻ với trình duyệt.</p>
+            <form id="token-form" class="inline-form"><label class="sr-only" for="token-name">Tên token</label><input id="token-name" placeholder="Tên token, ví dụ: Script cá nhân" maxlength="60" required><button class="primary" type="submit">Tạo token</button></form>
+            <div id="new-token-panel" class="token-reveal" hidden><strong>Lưu token này ngay</strong><p>Token chỉ hiển thị một lần. Hãy cất ở nơi riêng tư.</p><label class="sr-only" for="new-token">Token vừa tạo</label><input id="new-token" readonly><div class="token-reveal-actions"><button id="copy-token" type="button" class="quiet">Sao chép token</button><button id="hide-token" type="button" class="quiet">Đã lưu, đóng lại</button></div></div>
+            <ul id="token-list" class="token-list"></ul><p id="token-empty" class="muted">Bạn chưa có token nào.</p>
+          </section>
+          <section class="settings-section api-docs"><h2>Gọi API dịch</h2><p><code>POST /api/v1/translate</code></p><pre id="api-example"></pre><p>Lấy danh sách model: <code>GET /api/v1/models</code>, dùng cùng header <code>Authorization</code>.</p><p>Tối đa 20.000 ký tự / yêu cầu, 60 yêu cầu / phút, 3 bản dịch đồng thời. <code>source</code> mặc định là <code>auto</code>; <code>target</code> mặc định là <code>vi</code>.</p></section>
+          <section class="settings-section"><h2>Đổi mật khẩu</h2><p>Tối thiểu 12 ký tự. Các phiên đăng nhập khác sẽ kết thúc.</p><form id="password-form" class="password-form"><label for="current-password">Mật khẩu hiện tại</label><input id="current-password" type="password" autocomplete="current-password" required maxlength="256"><label for="new-password">Mật khẩu mới</label><input id="new-password" type="password" autocomplete="new-password" required minlength="12" maxlength="256"><button class="secondary" type="submit">Cập nhật mật khẩu</button></form></section>
+        </div>
+        <p id="account-status" role="status" aria-live="polite"></p>
+      </section>
+    </main>
+    <footer class="site-footer"><span>translate.hzzmonet.io.vn</span><span>Ngắn gọn. Rõ nghĩa. Đúng ý.</span></footer>
+  </div>
+</body>
+</html>

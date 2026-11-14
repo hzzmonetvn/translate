@@ -1,0 +1,30 @@
+[Unit]
+Description=Translation workspace
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=translate
+Group=translate
+WorkingDirectory=/opt/translate
+Environment=NODE_ENV=production
+EnvironmentFile=/etc/translate.env
+ExecStart=/usr/bin/node /opt/translate/src/server.js
+Restart=on-failure
+RestartSec=5
+UMask=0077
+StateDirectory=translate
+StateDirectoryMode=0700
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+ReadWritePaths=/var/lib/translate
+
+[Install]
+WantedBy=multi-user.target
