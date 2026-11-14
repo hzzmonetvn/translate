@@ -295,6 +295,80 @@ test('translation retries a configured fallback when the selected model fails or
   assert.equal((await response.json()).model, 'test/translator');
 });
 
+test('glossary entries are scoped by target language, updated in place and removable', async (t) => {
+  const f = await fixture(t);
+  const cookie = await f.login();
+  const added = await (await f.json('/api/glossary', { lang: 'vi', source: 'Settings', target: 'Cài đặt' }, cookie)).json();
+  assert.equal(added.count, 1);
+  await f.json('/api/glossary', { lang: 'en', source: 'Settings', target: 'Preferences' }, cookie);
+  await f.json('/api/glossary', { lang: 'vi', source: 'settings', target: 'Thiết lập' }, cookie);
+  const vi = await (await f.request('/api/glossary?lang=vi', { headers: { Cookie: cookie } })).json();
+  assert.equal(vi.entries.length, 1);
+  assert.equal(vi.entries[0].target, 'Thiết lập');
+  const en = await (await f.request('/api/glossary?lang=en', { headers: { Cookie: cookie } })).json();
+  assert.equal(en.entries[0].target, 'Preferences');
+  assert.equal(en.count, 1);
+  assert.equal((await f.json(`/api/glossary/${vi.entries[0].id}`, {}, cookie, { method: 'DELETE' })).status, 200);
+  assert.equal((await (await f.request('/api/glossary?lang=vi', { headers: { Cookie: cookie } })).json()).entries.length, 0);
+  assert.equal((await f.json('/api/glossary', { lang: 'auto', source: 'a', target: 'b' }, cookie)).status, 400);
+  assert.equal((await f.json('/api/glossary', { lang: 'vi', source: 'a' }, cookie)).status, 400);
+  assert.equal((await f.json('/api/glossary', { lang: 'vi', source: 'line\nbreak', target: 'b' }, cookie)).status, 400);
+  assert.equal((await f.json('/api/glossary', { lang: 'vi', entries: Array.from({ length: 201 }, () => ({ source: 'a', target: 'b' })) }, cookie)).status, 400);
+});
+
+test('text translation adds glossary context and retries when a term is missing', async (t) => {
+  const systems = [];
+  const f = await fixture(t, {
+    fetch: async (url, options) => {
+      if (url.endsWith('/models')) return Response.json({ data: [{ id: 'test/translator' }] });
+      const system = JSON.parse(options.body).messages[0].content;
+      systems.push(system);
+      return Response.json({ choices: [{ message: { content: system.includes('previous attempt did not use') ? 'Mở Cài đặt' : 'Mở phần thiết lập' } }] });
+    },
+  });
+  const cookie = await f.login();
+  await f.json('/api/glossary', { lang: 'vi', source: 'Settings', target: 'Cài đặt' }, cookie);
+  const data = await (await f.json('/api/v1/translate', { text: 'Open Settings', target: 'vi' }, cookie)).json();
+  assert.equal(data.translation, 'Mở Cài đặt');
+  assert.equal(systems.length, 2);
+  assert.match(systems[0], /Required terminology/);
+  assert.match(systems[1], /previous attempt did not use/);
+});
+
+test('file translation sends glossary context and only accepts a miss after retries', async (t) => {
+  let calls = 0;
+  const f = await fixture(t, {
+    fetch: async (url, options) => {
+      if (url.endsWith('/models')) return Response.json({ data: [{ id: 'test/translator' }] });
+      calls++;
+      const system = JSON.parse(options.body).messages[0].content;
+      assert.match(system, /Required terminology/);
+      const message = JSON.parse(options.body).messages[1].content;
+      const payload = JSON.parse(message.slice(message.indexOf('{')));
+      const map = Object.fromEntries(Object.keys(payload).map((key) => [key, 'Phần thiết lập']));
+      return Response.json({ choices: [{ message: { content: JSON.stringify(map) } }] });
+    },
+  });
+  const cookie = await f.login();
+  await f.json('/api/glossary', { lang: 'vi', source: 'Settings', target: 'Cài đặt' }, cookie);
+  const xml = '<resources>\n  <string name="settings">Settings</string>\n</resources>';
+  const events = (await (await f.json('/api/v1/translate-file', { filename: 'strings.xml', content: xml, target: 'vi' }, cookie)).text()).trim().split('\n').map(JSON.parse);
+  const done = events.at(-1);
+  assert.equal(done.translated, 1);
+  assert.equal(done.failed, 0);
+  assert.match(done.output, /Phần thiết lập/);
+  assert.equal(calls, 3);
+});
+
+test('glossary management is not available to API tokens', async (t) => {
+  const f = await fixture(t);
+  const cookie = await f.login();
+  const token = await (await f.json('/api/tokens', { name: 'Glossary token' }, cookie)).json();
+  const headers = { Authorization: `Bearer ${token.token}` };
+  assert.equal((await f.request('/api/glossary?lang=vi', { headers })).status, 403);
+  assert.equal((await f.json('/api/glossary', { lang: 'vi', source: 'a', target: 'b' }, undefined, { headers })).status, 403);
+});
+
 test('valid API tokens are not throttled by the session concurrency limit', async (t) => {
   let release;
   const gate = new Promise((resolve) => { release = resolve; });

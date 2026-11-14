@@ -36,6 +36,12 @@ export function createStore(path, { username, passwordHash }) {
       id TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id),
       name TEXT NOT NULL, hash TEXT UNIQUE NOT NULL, created INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS glossary (
+      id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id),
+      lang TEXT NOT NULL, source_key TEXT NOT NULL, source TEXT NOT NULL,
+      target TEXT NOT NULL, created INTEGER NOT NULL,
+      UNIQUE(user_id, lang, source_key)
+    );
   `);
   if (!db.prepare('SELECT id FROM users LIMIT 1').get()) {
     if (!username || !/^[a-f0-9]{32}:[a-f0-9]{128}$/.test(passwordHash || '')) {
@@ -74,6 +80,20 @@ export function createStore(path, { username, passwordHash }) {
       }
     },
     listTokens: (userId) => db.prepare('SELECT id, name, created FROM tokens WHERE user_id = ? ORDER BY created DESC').all(userId),
+    glossary: (userId, lang) => db.prepare('SELECT id, source, target FROM glossary WHERE user_id = ? AND lang = ? ORDER BY created DESC').all(userId, lang),
+    glossaryCount: (userId, lang) => db.prepare('SELECT COUNT(*) AS count FROM glossary WHERE user_id = ? AND lang = ?').get(userId, lang).count,
+    glossarySummary(userId, lang) {
+      const entries = db.prepare('SELECT id, source, target FROM glossary WHERE user_id = ? AND lang = ? ORDER BY created DESC').all(userId, lang);
+      const count = db.prepare('SELECT COUNT(*) AS count FROM glossary WHERE user_id = ? AND lang = ?').get(userId, lang).count;
+      return { lang, entries, count, limit: 200 };
+    },
+    saveGlossary(userId, lang, source, target) {
+      db.prepare(`INSERT INTO glossary (user_id, lang, source_key, source, target, created)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(user_id, lang, source_key) DO UPDATE SET source = excluded.source, target = excluded.target`)
+        .run(userId, lang, source.toLocaleLowerCase(), source, target, Date.now());
+    },
+    deleteGlossary: (userId, id) => db.prepare('DELETE FROM glossary WHERE user_id = ? AND id = ?').run(userId, id),
     createToken(userId, name) {
       const id = randomBytes(8).toString('hex');
       const value = `tr_${randomBytes(32).toString('base64url')}`;

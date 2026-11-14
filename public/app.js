@@ -84,7 +84,7 @@ function showWorkspace(user) {
   $('model-status').textContent = 'Mở danh sách để tải model từ OmniRoute';
 }
 function switchTab(tab) {
-  for (const name of ['translate', 'account']) {
+  for (const name of ['translate', 'glossary', 'account']) {
     const selected = name === tab;
     $(`${name}-panel`).hidden = !selected;
     $(`${name}-tab`).classList.toggle('active', selected);
@@ -92,7 +92,8 @@ function switchTab(tab) {
     else $(`${name}-tab`).removeAttribute('aria-current');
   }
   if (tab === 'account') loadTokens().catch((e) => showError('global-error', e.message));
-  else { $('new-token').value = ''; $('new-token-panel').hidden = true; }
+  if (tab === 'glossary') loadGlossary().catch((e) => showError('global-error', e.message));
+  if (tab !== 'account') { $('new-token').value = ''; $('new-token-panel').hidden = true; }
 }
 
 for (const [code, name] of Object.entries(languageNames)) {
@@ -434,4 +435,80 @@ $('download-file').addEventListener('click', () => {
   link.download = fileDownloadName;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 4000);
+});
+
+// --- Glossary ---
+for (const [code, name] of Object.entries(languageNames)) {
+  if (code !== 'auto') $('glossary-lang').add(new Option(name, code));
+}
+$('glossary-lang').value = 'vi';
+let glossaryRequest = 0;
+
+function renderGlossary(data) {
+  $('glossary-count').textContent = `${data.count} / ${data.limit} thuật ngữ · ${languageNames[data.lang] || data.lang}`;
+  $('glossary-empty').hidden = data.entries.length > 0;
+  $('glossary-list').replaceChildren(...data.entries.map((entry) => {
+    const row = document.createElement('li');
+    const info = document.createElement('span');
+    info.className = 'token-info';
+    info.textContent = `${entry.source} → ${entry.target}`;
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'quiet';
+    remove.textContent = 'Xóa';
+    remove.setAttribute('aria-label', `Xóa thuật ngữ ${entry.source}`);
+    remove.addEventListener('click', async () => {
+      remove.disabled = true;
+      try {
+        await api(`/api/glossary/${entry.id}`, { method: 'DELETE', body: '{}' });
+        await loadGlossary();
+      } catch (error) { showError('global-error', error.message); remove.disabled = false; }
+    });
+    row.append(info, remove);
+    return row;
+  }));
+}
+async function loadGlossary() {
+  const request = ++glossaryRequest;
+  const data = await api(`/api/glossary?lang=${encodeURIComponent($('glossary-lang').value)}`);
+  if (request === glossaryRequest) renderGlossary(data);
+}
+$('glossary-tab').addEventListener('click', () => switchTab('glossary'));
+$('glossary-lang').addEventListener('change', () => {
+  $('glossary-status').textContent = '';
+  loadGlossary().catch((error) => showError('global-error', error.message));
+});
+$('glossary-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  showError('global-error');
+  const button = event.submitter;
+  button.disabled = true;
+  $('glossary-status').textContent = '';
+  try {
+    await post('/api/glossary', { lang: $('glossary-lang').value, source: $('glossary-source').value, target: $('glossary-target').value });
+    $('glossary-source').value = '';
+    $('glossary-target').value = '';
+    $('glossary-status').textContent = 'Đã thêm thuật ngữ.';
+    await loadGlossary();
+  } catch (error) { showError('global-error', error.message); }
+  finally { button.disabled = false; }
+});
+$('glossary-import-button').addEventListener('click', async (event) => {
+  showError('global-error');
+  $('glossary-status').textContent = '';
+  const button = event.currentTarget;
+  button.disabled = true;
+  try {
+    const entries = $('glossary-import').value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
+      const split = line.includes('=') ? line.indexOf('=') : line.indexOf('\t');
+      if (split < 1) throw new Error(`Dòng không hợp lệ: ${line.slice(0, 60)}`);
+      return { source: line.slice(0, split).trim(), target: line.slice(split + 1).trim() };
+    });
+    if (!entries.length) throw new Error('Chưa có dòng nào để nhập.');
+    const data = await post('/api/glossary', { lang: $('glossary-lang').value, entries });
+    $('glossary-import').value = '';
+    $('glossary-status').textContent = `Đã nhập ${entries.length} thuật ngữ.`;
+    renderGlossary(data);
+  } catch (error) { showError('global-error', error.message); }
+  finally { button.disabled = false; }
 });

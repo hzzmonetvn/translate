@@ -80,6 +80,12 @@ The OmniRoute key stays in the server environment. SQLite holds password hashes,
 
 Supported files: Android `strings.xml` or other resource XML, `.txt`, `.md`. For Android, the backend rewrites only translatable values and leaves keys, comments, namespaces, `<plurals>` quantities, `translatable="false"`, CDATA and resource references untouched. Placeholders (`%1$s`), XML tags, entities (`&amp;`) and Java escapes (`\n`) are tokenized before the model sees the text and restored afterwards; any entry that loses a token is retried alone and then kept in the source language, with its name reported in `failedNames`. Entries are batched (30 items / 5,000 characters) and translated three batches at a time. Identical values are translated once and reused across every resource that shares them, and values with no translatable letters after placeholder protection (for example `%1$s` or `100%`) are kept untouched and reported as `skipped`. For Android files, resource keys travel with each batch as disambiguation context and the prompt asks for concise app UI wording. Each file batch attempt times out after 30 seconds. Save the downloaded XML as `app/src/main/res/values-<lang>/strings.xml`.
 
+### Glossary
+
+Terminology lives per account and target language: `GET /api/glossary?lang=vi`, `POST /api/glossary` with `{lang, source, target}` or `{lang, entries:[...]}`, and `DELETE /api/glossary/:id`. Up to 200 entries per language, 80 characters for the source and 120 for the target. Management requires a browser session; stored terms apply automatically to text, file and API translations for the matching `target`.
+
+Matching is case-insensitive. Relevant terms are added to the prompt, then the response is checked: if a source term was present but its target term is missing, text translation retries once with a stricter note, and file entries retry twice before the final attempt accepts a translated string without the term rather than leaving it in the source language.
+
 ### Rollback and backup
 
 Before each deployment, save `/opt/translate` as a dated sibling directory and copy `/etc/caddy/Caddyfile` to a dated backup. Restore that directory and Caddyfile, reload Caddy and restart `translate` to roll back. Stop the service before backing up or restoring its SQLite database and companion WAL files. Do not delete state when rolling back application code.
