@@ -319,7 +319,8 @@ test('file translation streams NDJSON progress and preserves Android resource st
   const f = await fixture(t, {
     fetch: async (url, options) => {
       if (url.endsWith('/models')) return Response.json({ data: [{ id: 'test/translator' }] });
-      const source = JSON.parse(JSON.parse(options.body).messages[1].content);
+      const message = JSON.parse(options.body).messages[1].content;
+      const source = JSON.parse(message.slice(message.indexOf('{')));
       const map = Object.fromEntries(Object.entries(source).map(([key, value]) => [key, `VI ${value}`]));
       return Response.json({ choices: [{ message: { content: JSON.stringify(map) } }] });
     },
@@ -353,7 +354,8 @@ test('file entries that lose protected tokens stay untranslated and are reported
   const f = await fixture(t, {
     fetch: async (url, options) => {
       if (url.endsWith('/models')) return Response.json({ data: [{ id: 'test/translator' }] });
-      const source = JSON.parse(JSON.parse(options.body).messages[1].content);
+      const message = JSON.parse(options.body).messages[1].content;
+      const source = JSON.parse(message.slice(message.indexOf('{')));
       const map = Object.fromEntries(Object.entries(source).map(([key, value]) => [key, value.includes('⟦') ? 'Đã mất token' : `VI ${value}`]));
       return Response.json({ choices: [{ message: { content: JSON.stringify(map) } }] });
     },
@@ -367,6 +369,37 @@ test('file entries that lose protected tokens stay untranslated and are reported
   assert.equal(done.failed, 1);
   assert.deepEqual(done.failedNames, ['pct']);
   assert.match(done.output, /<string name="pct">Hi %1\$s<\/string>/);
+});
+
+test('repeated strings are translated once and values without letters are kept as-is', async (t) => {
+  const payloads = [];
+  const keysSeen = [];
+  const f = await fixture(t, {
+    fetch: async (url, options) => {
+      if (url.endsWith('/models')) return Response.json({ data: [{ id: 'test/translator' }] });
+      const message = JSON.parse(options.body).messages[1].content;
+      keysSeen.push(message.slice(0, message.indexOf('{')));
+      const payload = JSON.parse(message.slice(message.indexOf('{')));
+      payloads.push(payload);
+      const map = Object.fromEntries(Object.keys(payload).map((key) => [key, 'VI']));
+      return Response.json({ choices: [{ message: { content: JSON.stringify(map) } }] });
+    },
+  });
+  const cookie = await f.login();
+  const xml = '<resources>\n  <string name="a">Cancel</string>\n  <string name="b">Cancel</string>\n  <string name="c">%1$s</string>\n  <string name="d">100%</string>\n</resources>';
+  const events = (await (await f.json('/api/v1/translate-file', { filename: 'strings.xml', content: xml, target: 'vi' }, cookie)).text()).trim().split('\n').map(JSON.parse);
+  const done = events.at(-1);
+  assert.equal(payloads.length, 1);
+  assert.equal(Object.keys(payloads[0]).length, 1);
+  assert.match(keysSeen[0], /Resource keys/);
+  assert.equal(done.total, 4);
+  assert.equal(done.translated, 2);
+  assert.equal(done.skipped, 2);
+  assert.equal(done.failed, 0);
+  assert.match(done.output, /<string name="a">VI<\/string>/);
+  assert.match(done.output, /<string name="b">VI<\/string>/);
+  assert.match(done.output, /<string name="c">%1\$s<\/string>/);
+  assert.match(done.output, /<string name="d">100%<\/string>/);
 });
 
 test('file translation rejects unsupported types and entries without translations', async (t) => {

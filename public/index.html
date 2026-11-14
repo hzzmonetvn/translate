@@ -93,7 +93,7 @@
               <input id="file-input" type="file" accept=".xml,.txt,.md,.markdown" hidden>
               <label for="file-input" class="file-drop-label">
                 <strong>Chọn hoặc kéo thả tệp</strong>
-                <span>strings.xml, .xml, .txt hoặc .md · tối đa 1 MB · 3.000 mục</span>
+                <span>strings.xml, .xml, .txt hoặc .md · tối đa 10 MB · 20.000 mục</span>
               </label>
               <p id="file-name" class="file-name" hidden></p>
             </div>
@@ -127,7 +127,7 @@
             <div id="new-token-panel" class="token-reveal" hidden><strong>Lưu token này ngay</strong><p>Token chỉ hiển thị một lần. Hãy cất ở nơi riêng tư.</p><label class="sr-only" for="new-token">Token vừa tạo</label><input id="new-token" readonly><div class="token-reveal-actions"><button id="copy-token" type="button" class="quiet">Sao chép token</button><button id="hide-token" type="button" class="quiet">Đã lưu, đóng lại</button></div></div>
             <ul id="token-list" class="token-list"></ul><p id="token-empty" class="muted">Bạn chưa có token nào.</p>
           </section>
-          <section class="settings-section api-docs"><h2>Gọi API dịch</h2><p><code>POST /api/v1/translate</code></p><pre id="api-example"></pre><p>Lấy danh sách model: <code>GET /api/v1/models</code>, dùng cùng header <code>Authorization</code>.</p><p>Dịch tệp: <code>POST /api/v1/translate-file</code>, trả về NDJSON gồm <code>start</code>, <code>progress</code> và <code>done</code>.</p><p>Token hợp lệ không bị giới hạn số lượt gọi. Mỗi yêu cầu văn bản tối đa 20.000 ký tự; mỗi tệp tối đa 1 MB và 3.000 mục. <code>source</code> mặc định là <code>auto</code>; <code>target</code> mặc định là <code>vi</code>.</p></section>
+          <section class="settings-section api-docs"><h2>Gọi API dịch</h2><p><code>POST /api/v1/translate</code></p><pre id="api-example"></pre><p>Lấy danh sách model: <code>GET /api/v1/models</code>, dùng cùng header <code>Authorization</code>.</p><p>Dịch tệp: <code>POST /api/v1/translate-file</code>, trả về NDJSON gồm <code>start</code>, <code>progress</code> và <code>done</code>.</p><p>Token hợp lệ không bị giới hạn số lượt gọi. Mỗi yêu cầu văn bản tối đa 20.000 ký tự; mỗi tệp tối đa 10 MB và 20.000 mục. <code>source</code> mặc định là <code>auto</code>; <code>target</code> mặc định là <code>vi</code>.</p></section>
           <section class="settings-section"><h2>Đổi mật khẩu</h2><p>Tối thiểu 12 ký tự. Các phiên đăng nhập khác sẽ kết thúc.</p><form id="password-form" class="password-form"><label for="current-password">Mật khẩu hiện tại</label><input id="current-password" type="password" autocomplete="current-password" required maxlength="256"><label for="new-password">Mật khẩu mới</label><input id="new-password" type="password" autocomplete="new-password" required minlength="12" maxlength="256"><button class="secondary" type="submit">Cập nhật mật khẩu</button></form></section>
         </div>
         <p id="account-status" role="status" aria-live="polite"></p>

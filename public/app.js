@@ -347,7 +347,7 @@ function fileEvent(event) {
   fileDownloadName = `${(selectedFile?.name || 'translate').replace(/\.[^.]+$/, '')}-${target}.${extension}`;
   $('file-progress').hidden = true;
   $('file-status').textContent = '';
-  $('file-summary').textContent = `Đã dịch ${event.translated.toLocaleString('vi-VN')} / ${event.total.toLocaleString('vi-VN')} mục`;
+  $('file-summary').textContent = `Đã dịch ${event.translated.toLocaleString('vi-VN')} / ${(event.total - (event.skipped || 0)).toLocaleString('vi-VN')} mục${event.skipped ? ` · giữ nguyên ${event.skipped.toLocaleString('vi-VN')} mục không cần dịch` : ''}`;
   $('file-hint').textContent = event.format === 'xml'
     ? `Lưu tệp vào app/src/main/res/values-${target}/strings.xml để Android dùng làm ngôn ngữ phụ.`
     : 'Tệp giữ nguyên cấu trúc đoạn và định dạng Markdown.';
@@ -370,7 +370,7 @@ $('file-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   showFileError('');
   if (!selectedFile) { showFileError('Chọn một tệp trước khi dịch.'); return; }
-  if (selectedFile.size > 1000000) { showFileError('Tệp vượt quá 1 MB.'); return; }
+  if (selectedFile.size > 10000000) { showFileError('Tệp vượt quá 10 MB.'); return; }
   const model = $('file-model').value.trim() || $('model').value.trim();
   if (!model) { showFileError('Chọn model dịch.'); return; }
   const button = $('file-button');

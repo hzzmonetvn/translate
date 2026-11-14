@@ -49,7 +49,7 @@ OpenRouter models use full provider-prefixed IDs such as `openrouter/google/gemi
 - `POST /api/v1/translate`: returns the translated text.
 - Supply `Authorization: Bearer YOUR_TOKEN` for either API endpoint.
 - Language codes: `auto` (source only), `vi`, `en`, `ja`, `ko`, `zh-CN`, `zh-TW`, `fr`, `de`, `es`, `ru`, `th`, `id`, `pt`, `it`, `ar`, `hi`.
-- Limits: 20,000 characters per text request, 1 MB and 3,000 entries per file. A valid API token is not throttled and has no concurrent-translation cap. Browser sessions keep 120 starts per minute and three concurrent translations. Each model attempt times out after 15 seconds.
+- Limits: 20,000 characters per text request, 10 MB and 20,000 entries per file. A valid API token is not throttled and has no concurrent-translation cap. Browser sessions keep 120 starts per minute and three concurrent translations. Each model attempt times out after 15 seconds.
 - Errors use `{"error":"message"}` with HTTP 400, 401, 403, 413, 415, 429, 502 or 504 as appropriate.
 - Tokens are limited to the two API endpoints. Use the web account settings to revoke them.
 
@@ -78,7 +78,7 @@ The OmniRoute key stays in the server environment. SQLite holds password hashes,
 {"type":"error","error":"message"}
 ```
 
-Supported files: Android `strings.xml` or other resource XML, `.txt`, `.md`. For Android, the backend rewrites only translatable values and leaves keys, comments, namespaces, `<plurals>` quantities, `translatable="false"`, CDATA and resource references untouched. Placeholders (`%1$s`), XML tags, entities (`&amp;`) and Java escapes (`\n`) are tokenized before the model sees the text and restored afterwards; any entry that loses a token is retried alone and then kept in the source language, with its name reported in `failedNames`. Entries are batched (25 items / 3,500 characters) and translated three batches at a time. Save the downloaded XML as `app/src/main/res/values-<lang>/strings.xml`.
+Supported files: Android `strings.xml` or other resource XML, `.txt`, `.md`. For Android, the backend rewrites only translatable values and leaves keys, comments, namespaces, `<plurals>` quantities, `translatable="false"`, CDATA and resource references untouched. Placeholders (`%1$s`), XML tags, entities (`&amp;`) and Java escapes (`\n`) are tokenized before the model sees the text and restored afterwards; any entry that loses a token is retried alone and then kept in the source language, with its name reported in `failedNames`. Entries are batched (30 items / 5,000 characters) and translated three batches at a time. Identical values are translated once and reused across every resource that shares them, and values with no translatable letters after placeholder protection (for example `%1$s` or `100%`) are kept untouched and reported as `skipped`. For Android files, resource keys travel with each batch as disambiguation context and the prompt asks for concise app UI wording. Each file batch attempt times out after 30 seconds. Save the downloaded XML as `app/src/main/res/values-<lang>/strings.xml`.
 
 ### Rollback and backup
 

@@ -236,15 +236,15 @@ export function createApp(config) {
       }
       if (path === '/api/v1/translate-file' && req.method === 'POST') {
         if (!viaToken) rate(`file:${principal.id}`, 20, 60000);
-        const body = await jsonBody(req, 1200000);
+        const body = await jsonBody(req, 13000000);
         const { filename, content, source = 'auto', target = 'vi', model = config.defaultModel } = body;
         if (typeof filename !== 'string' || !filename.trim() || filename.length > 160) fail(400, 'Tên tệp không hợp lệ.');
-        if (typeof content !== 'string' || !content.trim() || Buffer.byteLength(content) > 1000000) fail(400, 'Tệp cần có nội dung và không quá 1 MB.');
+        if (typeof content !== 'string' || !content.trim() || Buffer.byteLength(content) > 10000000) fail(400, 'Tệp cần có nội dung và không quá 10 MB.');
         if (!Object.hasOwn(languages, source) || !Object.hasOwn(languages, target) || target === 'auto') fail(400, 'Ngôn ngữ không hợp lệ.');
         if (typeof model !== 'string' || !(await models()).some((m) => m.id === model)) fail(400, 'Model không có trong danh sách OmniRoute.');
         const parsed = parseFile(filename, content);
         if (!parsed.entries.length) fail(400, 'Không tìm thấy nội dung dịch được trong tệp.');
-        if (parsed.entries.length > 3000) fail(400, 'Tệp có hơn 3.000 mục cần dịch.');
+        if (parsed.entries.length > 20000) fail(400, 'Tệp có hơn 20.000 mục cần dịch.');
         if (!viaToken && (active.get(principal.id) || 0) >= 3) fail(429, 'Đang có 3 bản dịch chạy. Vui lòng đợi hoàn tất.');
         if (!viaToken) active.set(principal.id, (active.get(principal.id) || 0) + 1);
         const controller = new AbortController();
@@ -256,8 +256,9 @@ export function createApp(config) {
           const total = parsed.entries.length;
           write({ type: 'start', total, format: parsed.format, filename });
           const extraSpans = parsed.format === 'text' ? MARKDOWN_SPANS : [];
-          const { translated, failed } = await translateEntries({
-            entries: parsed.entries, model, targetLabel: languagePromptName(target), callChain,
+          const kind = parsed.format === 'xml' ? 'android' : 'text';
+          const { translated, failedCount, failedNames } = await translateEntries({
+            entries: parsed.entries, model, targetLabel: languagePromptName(target), kind, callChain,
             signal: controller.signal, extraSpans,
             onProgress: (done) => write({ type: 'progress', done, total }),
           });
@@ -267,7 +268,8 @@ export function createApp(config) {
             source: entry.value.slice(0, 300),
             target: (translated.get(entry.index) || '').slice(0, 300),
           }));
-          write({ type: 'done', output, translated: translated.size, failed: failed.length, failedNames: failed.slice(0, 12), total, format: parsed.format, preview });
+          const skipped = total - translated.size - failedCount;
+          write({ type: 'done', output, translated: translated.size, failed: failedCount, failedNames, skipped, total, format: parsed.format, preview });
           res.end();
         } catch (error) {
           if (!res.writableEnded) {
@@ -284,7 +286,7 @@ export function createApp(config) {
       send(res, error.status || 500, { error: error.status ? error.message : 'Có lỗi máy chủ. Vui lòng thử lại.' });
     }
   });
-  server.requestTimeout = 30000;
+  server.requestTimeout = 120000;
   server.headersTimeout = 15000;
   return { server, store };
 }
