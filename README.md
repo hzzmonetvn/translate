@@ -49,7 +49,7 @@ OpenRouter models use full provider-prefixed IDs such as `openrouter/google/gemi
 - `POST /api/v1/translate`: returns the translated text.
 - Supply `Authorization: Bearer YOUR_TOKEN` for either API endpoint.
 - Language codes: `auto` (source only), `vi`, `en`, `ja`, `ko`, `zh-CN`, `zh-TW`, `fr`, `de`, `es`, `ru`, `th`, `id`, `pt`, `it`, `ar`, `hi`.
-- Limits: 20,000 characters per translation, 60 starts per minute per account, three active translations per account, 90-second upstream timeout.
+- Limits: 20,000 characters per text request, 1 MB and 3,000 entries per file. A valid API token is not throttled and has no concurrent-translation cap. Browser sessions keep 120 starts per minute and three concurrent translations. Each model attempt times out after 15 seconds.
 - Errors use `{"error":"message"}` with HTTP 400, 401, 403, 413, 415, 429, 502 or 504 as appropriate.
 - Tokens are limited to the two API endpoints. Use the web account settings to revoke them.
 
@@ -66,6 +66,19 @@ OpenRouter models use full provider-prefixed IDs such as `openrouter/google/gemi
 The application listens on loopback only. Use the supplied Caddy block: it overwrites `X-Translate-Client-IP` with the direct peer address and accepts `CF-Connecting-IP` only from listed Cloudflare peers. Update those ranges from Cloudflare when they change. Do not make the backend port public. Production session cookies require HTTPS. Health endpoint: `GET /healthz`.
 
 The OmniRoute key stays in the server environment. SQLite holds password hashes, session hashes and token hashes, not translation history. Upstream providers receive submitted text under their own retention settings. Keep environment files and state backups private.
+
+### File translation
+
+`POST /api/v1/translate-file` accepts `{filename, content, source, target, model}` and streams NDJSON:
+
+```
+{"type":"start","total":120,"format":"xml"}
+{"type":"progress","done":25,"total":120}
+{"type":"done","output":"<translated file>","translated":118,"failed":2,...}
+{"type":"error","error":"message"}
+```
+
+Supported files: Android `strings.xml` or other resource XML, `.txt`, `.md`. For Android, the backend rewrites only translatable values and leaves keys, comments, namespaces, `<plurals>` quantities, `translatable="false"`, CDATA and resource references untouched. Placeholders (`%1$s`), XML tags, entities (`&amp;`) and Java escapes (`\n`) are tokenized before the model sees the text and restored afterwards; any entry that loses a token is retried alone and then kept in the source language, with its name reported in `failedNames`. Entries are batched (25 items / 3,500 characters) and translated three batches at a time. Save the downloaded XML as `app/src/main/res/values-<lang>/strings.xml`.
 
 ### Rollback and backup
 

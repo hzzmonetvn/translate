@@ -46,8 +46,7 @@ async function api(path, options = {}) {
 }
 function post(path, body, options = {}) { return api(path, { method: 'POST', body: JSON.stringify(body), ...options }); }
 
-function filterModels() {
-  const query = $('model').value.toLowerCase();
+function filterModels(query = $('model').value.toLowerCase()) {
   const matches = modelList.filter((m) => m.id.toLowerCase().includes(query)).slice(0, 100);
   $('model-options').replaceChildren(...matches.map((m) => {
     const option = document.createElement('option'); option.value = m.id; return option;
@@ -239,3 +238,200 @@ $('password-form').addEventListener('submit', async (event) => {
     if (!error.message.includes('đăng nhập')) showError('login-error', 'Kết nối máy chủ gặp lỗi. Hãy tải lại trang.');
   }
 })();
+
+// --- Theme ---
+const THEME_KEY = 'translate-theme';
+const activeTheme = () => (document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
+function paintThemeButtons() {
+  const dark = activeTheme() === 'dark';
+  for (const button of document.querySelectorAll('[data-theme-toggle]')) {
+    button.setAttribute('aria-pressed', String(dark));
+    button.setAttribute('aria-label', dark ? 'Chuyển sang giao diện sáng' : 'Chuyển sang giao diện tối');
+    button.title = button.getAttribute('aria-label');
+  }
+}
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  try { localStorage.setItem(THEME_KEY, theme); } catch { /* storage is optional */ }
+  paintThemeButtons();
+}
+for (const button of document.querySelectorAll('[data-theme-toggle]')) {
+  button.addEventListener('click', () => applyTheme(activeTheme() === 'dark' ? 'light' : 'dark'));
+}
+paintThemeButtons();
+
+// --- Translation modes ---
+function setMode(mode) {
+  for (const name of ['text', 'file']) {
+    const selected = name === mode;
+    $(`${name}-mode`).hidden = !selected;
+    $(`mode-${name}`).classList.toggle('active', selected);
+    $(`mode-${name}`).setAttribute('aria-selected', String(selected));
+  }
+  if (mode === 'file' && !$('file-model').value) $('file-model').value = $('model').value;
+}
+$('mode-text').addEventListener('click', () => setMode('text'));
+$('mode-file').addEventListener('click', () => setMode('file'));
+
+// --- File translation ---
+for (const [code, name] of Object.entries(languageNames)) {
+  $('file-source-language').add(new Option(name, code));
+  if (code !== 'auto') $('file-target-language').add(new Option(name, code));
+}
+$('file-target-language').value = 'vi';
+$('file-model').addEventListener('focus', () => {
+  if (modelList.length) filterModels($('file-model').value.toLowerCase());
+  else loadModels();
+});
+
+let selectedFile = null;
+let fileResult = null;
+let fileDownloadName = '';
+
+function fileEstimate(text, name) {
+  if (/\.xml$/i.test(name)) return (text.match(/<(?:string|item)\b[^>]*>/g) || []).length;
+  return text.split(/\r?\n[ \t]*\r?\n/).filter((part) => part.trim()).length;
+}
+function fileLabel() {
+  if (!selectedFile) { $('file-name').hidden = true; $('file-count').textContent = ''; return; }
+  $('file-name').hidden = false;
+  $('file-name').textContent = `${selectedFile.name} · ${(selectedFile.size / 1024).toFixed(1)} KB`;
+}
+function chooseFile(file) {
+  selectedFile = file || null;
+  fileResult = null;
+  $('file-result').hidden = true;
+  $('file-error').hidden = true;
+  $('file-status').textContent = '';
+  $('file-progress').hidden = true;
+  fileLabel();
+  if (!file) { $('file-count').textContent = ''; return; }
+  file.text().then((text) => {
+    if (selectedFile !== file) return;
+    const estimate = fileEstimate(text, file.name);
+    $('file-count').textContent = estimate ? `~${estimate.toLocaleString('vi-VN')} mục cần dịch` : 'Không nhận diện được nội dung';
+  }).catch(() => { $('file-count').textContent = ''; });
+}
+$('file-input').addEventListener('change', () => chooseFile($('file-input').files[0]));
+const dropZone = $('file-drop');
+dropZone.addEventListener('dragover', (event) => { event.preventDefault(); dropZone.classList.add('dragging'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragging'));
+dropZone.addEventListener('drop', (event) => {
+  event.preventDefault();
+  dropZone.classList.remove('dragging');
+  chooseFile(event.dataTransfer.files[0]);
+});
+
+function showFileError(message) {
+  $('file-error').textContent = message;
+  $('file-error').hidden = !message;
+}
+function fileEvent(event) {
+  if (event.type === 'start') {
+    $('file-progress').hidden = false;
+    $('file-progress-bar').style.width = '0%';
+    $('file-status').textContent = `Đang dịch 0 / ${event.total.toLocaleString('vi-VN')} mục…`;
+    return;
+  }
+  if (event.type === 'progress') {
+    const percent = event.total ? Math.round((event.done / event.total) * 100) : 0;
+    $('file-progress-bar').style.width = `${percent}%`;
+    $('file-status').textContent = `Đang dịch ${event.done.toLocaleString('vi-VN')} / ${event.total.toLocaleString('vi-VN')} mục…`;
+    return;
+  }
+  if (event.type === 'error') { showFileError(event.error); return; }
+  if (event.type !== 'done') return;
+  fileResult = event;
+  const target = $('file-target-language').value;
+  const extension = (/\.([a-z0-9]+)$/i.exec(selectedFile?.name || '')?.[1] || 'txt').toLowerCase();
+  fileDownloadName = `${(selectedFile?.name || 'translate').replace(/\.[^.]+$/, '')}-${target}.${extension}`;
+  $('file-progress').hidden = true;
+  $('file-status').textContent = '';
+  $('file-summary').textContent = `Đã dịch ${event.translated.toLocaleString('vi-VN')} / ${event.total.toLocaleString('vi-VN')} mục`;
+  $('file-hint').textContent = event.format === 'xml'
+    ? `Lưu tệp vào app/src/main/res/values-${target}/strings.xml để Android dùng làm ngôn ngữ phụ.`
+    : 'Tệp giữ nguyên cấu trúc đoạn và định dạng Markdown.';
+  $('file-preview').replaceChildren(...(event.preview || []).map((item) => {
+    const row = document.createElement('li');
+    const name = document.createElement('span'); name.className = 'preview-name'; name.textContent = item.name;
+    const source = document.createElement('span'); source.className = 'preview-source'; source.textContent = item.source;
+    const translation = document.createElement('span'); translation.className = 'preview-target'; translation.textContent = item.target || '(giữ nguyên)';
+    row.append(name, source, translation);
+    return row;
+  }));
+  if (event.failed) {
+    const message = `Còn ${event.failed} mục chưa dịch được: ${event.failedNames.join(', ')}`;
+    showFileError(message);
+  }
+  $('file-result').hidden = false;
+  $('download-file').disabled = false;
+}
+$('file-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  showFileError('');
+  if (!selectedFile) { showFileError('Chọn một tệp trước khi dịch.'); return; }
+  if (selectedFile.size > 1000000) { showFileError('Tệp vượt quá 1 MB.'); return; }
+  const model = $('file-model').value.trim() || $('model').value.trim();
+  if (!model) { showFileError('Chọn model dịch.'); return; }
+  const button = $('file-button');
+  button.disabled = true;
+  $('file-result').hidden = true;
+  $('download-file').disabled = true;
+  fileResult = null;
+  const original = button.innerHTML;
+  button.textContent = 'Đang dịch tệp…';
+  try {
+    const response = await fetch('/api/v1/translate-file', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        filename: selectedFile.name,
+        content: await selectedFile.text(),
+        source: $('file-source-language').value,
+        target: $('file-target-language').value,
+        model,
+      }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || `Lỗi ${response.status}. Vui lòng thử lại.`);
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let finished = false;
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let index;
+      while ((index = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, index).trim();
+        buffer = buffer.slice(index + 1);
+        if (!line) continue;
+        const parsed = JSON.parse(line);
+        fileEvent(parsed);
+        if (parsed.type === 'done') finished = true;
+        if (parsed.type === 'error') throw new Error(parsed.error);
+      }
+    }
+    if (!finished) throw new Error('Kết nối kết thúc trước khi hoàn tất. Hãy thử lại.');
+  } catch (error) {
+    showFileError(error.message);
+    $('file-status').textContent = '';
+    $('file-progress').hidden = true;
+  } finally {
+    button.disabled = false;
+    button.innerHTML = original;
+  }
+});
+$('download-file').addEventListener('click', () => {
+  if (!fileResult) return;
+  const type = fileResult.format === 'xml' ? 'application/xml' : 'text/plain';
+  const url = URL.createObjectURL(new Blob([fileResult.output], { type }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileDownloadName;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+});

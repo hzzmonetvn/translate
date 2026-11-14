@@ -295,6 +295,88 @@ test('translation retries a configured fallback when the selected model fails or
   assert.equal((await response.json()).model, 'test/translator');
 });
 
+test('valid API tokens are not throttled by the session concurrency limit', async (t) => {
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  let inFlight = 0;
+  const f = await fixture(t, { fetch: async (url) => {
+    if (url.endsWith('/models')) return Response.json({ data: [{ id: 'test/translator' }] });
+    inFlight++;
+    await gate;
+    return Response.json({ choices: [{ message: { content: 'Bản dịch' } }] });
+  } });
+  const cookie = await f.login();
+  const token = await (await f.json('/api/tokens', { name: 'Unlimited' }, cookie)).json();
+  const headers = { Authorization: `Bearer ${token.token}` };
+  const pending = Array.from({ length: 5 }, () => f.json('/api/v1/translate', { text: 'hi' }, undefined, { headers }));
+  for (let i = 0; i < 100 && inFlight < 5; i++) await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.equal(inFlight, 5);
+  release();
+  for (const response of await Promise.all(pending)) assert.equal(response.status, 200);
+});
+
+test('file translation streams NDJSON progress and preserves Android resource structure', async (t) => {
+  const f = await fixture(t, {
+    fetch: async (url, options) => {
+      if (url.endsWith('/models')) return Response.json({ data: [{ id: 'test/translator' }] });
+      const source = JSON.parse(JSON.parse(options.body).messages[1].content);
+      const map = Object.fromEntries(Object.entries(source).map(([key, value]) => [key, `VI ${value}`]));
+      return Response.json({ choices: [{ message: { content: JSON.stringify(map) } }] });
+    },
+  });
+  const cookie = await f.login();
+  const xml = `<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="hello">Hello</string>
+  <string name="party">Tom &amp; Jerry</string>
+  <string name="skip" translatable="false">Brand</string>
+  <string-array name="colors"><item>Red</item><item>Blue</item></string-array>
+</resources>`;
+  const response = await f.json('/api/v1/translate-file', { filename: 'strings.xml', content: xml, target: 'vi' }, cookie);
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get('content-type'), /application\/x-ndjson/);
+  const events = (await response.text()).trim().split('\n').map((line) => JSON.parse(line));
+  assert.equal(events[0].type, 'start');
+  assert.equal(events[0].total, 4);
+  const done = events.at(-1);
+  assert.equal(done.type, 'done');
+  assert.equal(done.translated, 4);
+  assert.equal(done.failed, 0);
+  assert.match(done.output, /<string name="hello">VI Hello<\/string>/);
+  assert.match(done.output, /VI Tom &amp; Jerry/);
+  assert.match(done.output, /<string name="skip" translatable="false">Brand<\/string>/);
+  assert.match(done.output, /<item>VI Red<\/item><item>VI Blue<\/item>/);
+  assert.equal(done.preview.length, 4);
+});
+
+test('file entries that lose protected tokens stay untranslated and are reported', async (t) => {
+  const f = await fixture(t, {
+    fetch: async (url, options) => {
+      if (url.endsWith('/models')) return Response.json({ data: [{ id: 'test/translator' }] });
+      const source = JSON.parse(JSON.parse(options.body).messages[1].content);
+      const map = Object.fromEntries(Object.entries(source).map(([key, value]) => [key, value.includes('⟦') ? 'Đã mất token' : `VI ${value}`]));
+      return Response.json({ choices: [{ message: { content: JSON.stringify(map) } }] });
+    },
+  });
+  const cookie = await f.login();
+  const xml = '<resources>\n  <string name="plain">Hello</string>\n  <string name="pct">Hi %1$s</string>\n</resources>';
+  const response = await f.json('/api/v1/translate-file', { filename: 'strings.xml', content: xml, target: 'vi' }, cookie);
+  const events = (await response.text()).trim().split('\n').map((line) => JSON.parse(line));
+  const done = events.at(-1);
+  assert.equal(done.translated, 1);
+  assert.equal(done.failed, 1);
+  assert.deepEqual(done.failedNames, ['pct']);
+  assert.match(done.output, /<string name="pct">Hi %1\$s<\/string>/);
+});
+
+test('file translation rejects unsupported types and entries without translations', async (t) => {
+  const f = await fixture(t);
+  const cookie = await f.login();
+  assert.equal((await f.json('/api/v1/translate-file', { filename: 'a.pdf', content: '%PDF' }, cookie)).status, 400);
+  assert.equal((await f.json('/api/v1/translate-file', { filename: 'a.txt', content: '   ' }, cookie)).status, 400);
+  assert.equal((await f.json('/api/v1/translate-file', { filename: 'a.txt', content: 'Hello', target: 'auto' }, cookie)).status, 400);
+});
+
 test('single blank completion and malformed upstream responses become actionable errors', async (t) => {
   const f = await fixture(t, { fetch: async (url) => url.endsWith('/models')
     ? Response.json({ data: [{ id: 'test/translator' }] })
