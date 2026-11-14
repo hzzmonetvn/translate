@@ -78,20 +78,26 @@ export async function translateEntries({ entries, model, targetLabel, callChain,
   }
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, batches.length) }, batchWorker));
 
-  let retryCursor = 0;
-  async function retryWorker() {
-    while (retryCursor < retries.length) {
-      const entry = retries[retryCursor++];
-      try {
-        const outcome = await translateChunk([entry]);
-        for (const [key, value] of outcome.good) translated.set(key, value);
-        if (!outcome.good.size) failed.push(entry.name);
-      } catch (error) {
-        if (signal?.aborted) throw error;
-        failed.push(entry.name);
+  let pending = retries;
+  for (let round = 0; round < 2 && pending.length; round++) {
+    const next = [];
+    let retryCursor = 0;
+    async function retryWorker() {
+      while (retryCursor < pending.length) {
+        const entry = pending[retryCursor++];
+        try {
+          const outcome = await translateChunk([entry]);
+          for (const [key, value] of outcome.good) translated.set(key, value);
+          if (!outcome.good.size) next.push(entry);
+        } catch (error) {
+          if (signal?.aborted) throw error;
+          next.push(entry);
+        }
       }
     }
+    await Promise.all(Array.from({ length: Math.min(2, pending.length) }, retryWorker));
+    pending = next;
   }
-  await Promise.all(Array.from({ length: Math.min(2, retries.length) }, retryWorker));
+  failed.push(...pending.map((entry) => entry.name));
   return { translated, failed };
 }
