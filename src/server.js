@@ -8,7 +8,7 @@ const { server, store } = createApp({
   passwordHash: process.env.ADMIN_PASSWORD_HASH,
   omniUrl: process.env.OMNI_BASE_URL || 'http://127.0.0.1:20128/v1',
   omniKey: process.env.OMNI_API_KEY,
-  defaultModel: process.env.DEFAULT_MODEL || 'openrouter/auto',
+  defaultModel: process.env.DEFAULT_MODEL || 'cx/codex-auto-review',
   fallbackModels: (process.env.FALLBACK_MODELS || 'gpt-6-astra,sv2969').split(',').map((m) => m.trim()).filter(Boolean),
   secureCookie: process.env.NODE_ENV === 'production',
   trustProxy: process.env.TRUST_PROXY === '1',

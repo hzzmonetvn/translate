@@ -134,6 +134,16 @@ $('source-text').addEventListener('input', () => {
   $('char-count').textContent = `${$('source-text').value.length.toLocaleString('vi-VN')} / 20.000`;
   clearResult();
 });
+$('paste').addEventListener('click', async () => {
+  try {
+    const text = await navigator.clipboard.readText();
+    if (text.length > 20000) { showError('translation-error', 'Văn bản trong bộ nhớ tạm vượt quá 20.000 ký tự.'); return; }
+    if (translating) return;
+    $('source-text').value = text;
+    $('source-text').dispatchEvent(new Event('input'));
+    $('source-text').focus();
+  } catch { showError('translation-error', 'Không thể đọc bộ nhớ tạm. Hãy dán trực tiếp vào ô văn bản.'); }
+});
 $('clear').addEventListener('click', () => { $('source-text').value = ''; $('source-text').dispatchEvent(new Event('input')); $('source-text').focus(); });
 $('source-language').addEventListener('change', clearResult);
 $('target-language').addEventListener('change', clearResult);
@@ -159,7 +169,7 @@ $('translation-form').addEventListener('submit', async (event) => {
   if (modelList.length && !modelList.some((m) => m.id === model)) { showError('translation-error', 'Chọn một model trong danh sách OmniRoute.'); return; }
   translating = true;
   const generation = sessionGeneration;
-  const controls = ['source-text', 'source-language', 'target-language', 'model', 'swap', 'clear', 'translate-button'];
+  const controls = ['source-text', 'source-language', 'target-language', 'model', 'swap', 'paste', 'clear', 'translate-button'];
   controls.forEach((id) => { $(id).disabled = true; });
   $('translate-button').textContent = 'Đang dịch…';
   $('translation-status').textContent = 'Model đang xử lý văn bản…';
@@ -171,7 +181,7 @@ $('translation-form').addEventListener('submit', async (event) => {
     if (generation !== sessionGeneration) return;
     $('result-text').value = data.translation;
     $('copy').disabled = false;
-    $('translation-status').textContent = `Đã dịch · ${((performance.now() - started) / 1000).toFixed(1)} giây`;
+    $('translation-status').textContent = `Đã dịch · ${((performance.now() - started) / 1000).toFixed(1)}s`;
   } catch (error) {
     if (generation !== sessionGeneration) return;
     showError('translation-error', error.message);
@@ -179,7 +189,7 @@ $('translation-form').addEventListener('submit', async (event) => {
   } finally {
     translating = false;
     controls.forEach((id) => { $(id).disabled = false; });
-    $('translate-button').textContent = 'Dịch văn bản ↗';
+    $('translate-button').textContent = 'Dịch';
   }
 });
 async function copyText(text, button, original) {

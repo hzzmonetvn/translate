@@ -36,6 +36,12 @@ A small, login-required translation website with model selection, an authenticat
 5. Initial administrator credentials are generated locally and delivered privately; the password can be changed in the interface.
 6. Public source and CI are desired by the workspace instructions. Deployed credentials stay outside Git.
 
+## UI refresh and default model
+
+- **Translation interface:** Inspired by the reference translation page's language-first flow, place source and result in separate, vertically arranged panels. Keep the existing product identity, navigation, file translation, glossary, account features, and light/dark themes rather than copying the reference's branding or adding its unrelated features.
+- **Paste:** Read clipboard text only after the user selects Dán. Replace the source text, preserve the 20,000-character limit, and explain how to paste manually if browser permission is denied. Inserting at the cursor was considered, but replacing the input makes the button's result predictable.
+- **Default model:** Use `cx/codex-auto-review` when `DEFAULT_MODEL` is unset, and in the example environment. An explicitly configured `DEFAULT_MODEL` still takes precedence; changing the application default alone does not modify an existing deployment's environment.
+
 ## Review corrections
 
 - Recheck the stored password hash after asynchronous verification and immediately before creating a session. A login that started with the old hash is rejected if a concurrent password change committed in the meantime. Password updates also recheck the original hash before writing, avoiding overlapping updates from stale credentials.
